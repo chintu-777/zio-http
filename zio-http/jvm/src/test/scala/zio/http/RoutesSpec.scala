@@ -47,5 +47,26 @@ object RoutesSpec extends ZIOHttpSpec {
         result <- app.runZIO(Request(body = body))
       } yield assertTrue(result.body == body)
     },
+    test("anyOf method matches correct route") {
+      val handler = handler[Clock] {
+        case req @ GET -> Root / "test1" => Response.ok.withEntity("Handler for test1")
+        case req @ GET -> Root / "test2" => Response.ok.withEntity("Handler for test2")
+        case _ => Response.notFound
+      }
+
+      val routes = Routes(
+        GET / anyOf("test1", "test2") -> handler
+      )
+
+      for {
+        result1 <- routes.run(Request(Method.GET, path"/test1"))
+        result2 <- routes.run(Request(Method.GET, path"/test2"))
+        result3 <- routes.run(Request(Method.GET, path"/unknown"))
+      } yield {
+        assert(extractStatus(result1))(equalTo(Status.OK)) &&
+        assert(extractStatus(result2))(equalTo(Status.OK)) &&
+        assert(extractStatus(result3))(equalTo(Status.NotFound))
+      }
+    }
   )
 }
