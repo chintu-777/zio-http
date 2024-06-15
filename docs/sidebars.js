@@ -10,13 +10,16 @@ const sidebars = {
       items: [
         "installation",
 
-        // Reference section
+        
+
+        // Concepts section
         {
           type: "category",
-          collapsed: true,
-          link: { type: "doc", id: "reference/index" },
-          label: "Reference",
+          // collapsed: true,
+          link: { type: "doc", id: "concepts/intro" },
+          label: "Concepts",
           items: [
+
             "reference/overview",
             "reference/server",
             "reference/client",
@@ -111,6 +114,7 @@ const sidebars = {
           // Subcategory: Tutorials
           type: "category",
           label: "Tutorials",
+
           items: ["tutorials/testing-http-apps"],
         },
 
