@@ -147,6 +147,11 @@ final case class Routes[-Env, +Err](routes: Chunk[zio.http.Route[Env, Err]]) { s
   ): Routes[Env, Nothing] =
     new Routes(routes.map(_.handleErrorRequestCauseZIO(f)))
 
+  def anyOf(paths: String*): RoutePattern = {
+    val matchers = paths.map(p => RoutePattern(PathCodec.literal(p)))
+    RoutePattern.MatchAny(matchers)
+  }  
+
   /**
    * Checks to see if the HTTP application may be defined at the specified
    * request input. Note that it is still possible for an HTTP application to
@@ -166,7 +171,7 @@ final case class Routes[-Env, +Err](routes: Chunk[zio.http.Route[Env, Err]]) { s
 
   def run(request: Request)(implicit trace: Trace): ZIO[Env, Either[Err, Response], Response] = {
 
-    class RouteFailure[+Err](val err: Cause[Err]) extends Throwable(null, null, true, false) {
+    class RouteFailure[+Err0](val err: Cause[Err0]) extends Throwable(null, null, true, false) {
       override def getMessage: String = err.unified.headOption.fold("<unknown>")(_.message)
 
       override def getStackTrace(): Array[StackTraceElement] =
@@ -191,6 +196,17 @@ final case class Routes[-Env, +Err](routes: Chunk[zio.http.Route[Env, Err]]) { s
         case Cause.Die(value: RouteFailure[_], _) if value == routeFailure => routeFailure.err.map(Left(_))
         case cause                                                         => cause.map(Right(_))
       }
+  }
+
+  /**
+   * A shortcut for `Server.install(routes) *> ZIO.never`
+   */
+  def serve[Env1 <: Env](implicit
+    ev: Err <:< Response,
+    trace: Trace,
+    tag: EnvironmentTag[Env1],
+  ): URIO[Env1 with Server, Nothing] = {
+    Server.serve[Env1](self.handleError(_.asInstanceOf[Response]))
   }
 
   def run(
