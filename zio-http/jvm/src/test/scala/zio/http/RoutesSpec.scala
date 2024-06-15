@@ -47,26 +47,50 @@ object RoutesSpec extends ZIOHttpSpec {
         result <- app.runZIO(Request(body = body))
       } yield assertTrue(result.body == body)
     },
+    test("routes with different path parameter arities should all be handled") {
+      val one    = Method.GET / string("first") -> Handler.ok
+      val getone = Request.get("/1")
+
+      val two    = Method.GET / string("prefix") / string("second") -> Handler.internalServerError
+      val gettwo = Request.get("/2/two")
+
+      val onetwo = Routes(one, two)
+      val twoone = Routes(two, one)
+
+      for {
+        onetwoone <- onetwo.runZIO(getone)
+        onetwotwo <- onetwo.runZIO(gettwo)
+        twooneone <- twoone.runZIO(getone)
+        twoonetwo <- twoone.runZIO(gettwo)
+      } yield {
+        assertTrue(
+          extractStatus(onetwoone) == Status.Ok,
+          extractStatus(onetwotwo) == Status.InternalServerError,
+          extractStatus(twooneone) == Status.Ok,
+          extractStatus(twoonetwo) == Status.InternalServerError,
+        )
+      }
+    },
     test("anyOf method matches correct route") {
-      val handler = handler[Clock] {
-        case req @ GET -> Root / "test1" => Response.ok.withEntity("Handler for test1")
-        case req @ GET -> Root / "test2" => Response.ok.withEntity("Handler for test2")
-        case _ => Response.notFound
+      val handler = Http.collect[Request] {
+        case req @ GET -> !! / "test1" => Response.text("Handler for test1")
+        case req @ GET -> !! / "test2" => Response.text("Handler for test2")
+        case _ => Response.status(Status.NotFound)
       }
 
       val routes = Routes(
-        GET / anyOf("test1", "test2") -> handler
+        GET / Routes.anyOf("test1", "test2") -> handler
       )
 
       for {
-        result1 <- routes.run(Request(Method.GET, path"/test1"))
-        result2 <- routes.run(Request(Method.GET, path"/test2"))
-        result3 <- routes.run(Request(Method.GET, path"/unknown"))
+        result1 <- routes.run(Request(GET, Path("/test1")))
+        result2 <- routes.run(Request(GET, Path("/test2")))
+        result3 <- routes.run(Request(GET, Path("/unknown")))
       } yield {
         assert(extractStatus(result1))(equalTo(Status.OK)) &&
         assert(extractStatus(result2))(equalTo(Status.OK)) &&
         assert(extractStatus(result3))(equalTo(Status.NotFound))
       }
-    }
+    },
   )
 }
