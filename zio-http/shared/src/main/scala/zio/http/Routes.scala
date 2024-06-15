@@ -16,10 +16,12 @@
 
 package zio.http
 
+import java.io.File
+
 import zio._
 
 import zio.http.Routes.ApplyContextAspect
-import zio.http.codec.PathCodec
+import zio.http.codec._
 
 /**
  * An HTTP application is a collection of routes, all of whose errors have been
@@ -54,13 +56,13 @@ final case class Routes[-Env, +Err](routes: Chunk[zio.http.Route[Env, Err]]) { s
     copy(routes = routes ++ that.routes)
 
   /**
-   * Prepend the specified route to this HttpApp
+   * Prepend the specified route.
    */
   def +:[Env1 <: Env, Err1 >: Err](route: zio.http.Route[Env1, Err1]): Routes[Env1, Err1] =
     copy(routes = route +: routes)
 
   /**
-   * Appends the specified route to this HttpApp
+   * Appends the specified route.
    */
   def :+[Env1 <: Env, Err1 >: Err](route: zio.http.Route[Env1, Err1]): Routes[Env1, Err1] =
     copy(routes = routes :+ route)
@@ -102,14 +104,14 @@ final case class Routes[-Env, +Err](routes: Chunk[zio.http.Route[Env, Err]]) { s
 
   /**
    * Allows the transformation of the Err type through an Effectful program
-   * allowing one to build up a HttpApp in Stages delegates to the Route
+   * allowing one to build up Routes in Stages delegates to the Route.
    */
   def mapErrorZIO[Err1](fxn: Err => ZIO[Any, Err1, Response])(implicit trace: Trace): Routes[Env, Err1] =
     new Routes(routes.map(_.mapErrorZIO(fxn)))
 
   /**
    * Allows the transformation of the Err type through a function allowing one
-   * to build up a HttpApp in Stages delegates to the Route
+   * to build up Routes in Stages delegates to the Route.
    */
   def mapError[Err1](fxn: Err => Err1): Routes[Env, Err1] =
     new Routes(routes.map(_.mapError(fxn)))
@@ -146,11 +148,15 @@ final case class Routes[-Env, +Err](routes: Chunk[zio.http.Route[Env, Err]]) { s
     trace: Trace,
   ): Routes[Env, Nothing] =
     new Routes(routes.map(_.handleErrorRequestCauseZIO(f)))
-
-  def anyOf(paths: String*): RoutePattern = {
-    val matchers = paths.map(p => RoutePattern(PathCodec.literal(p)))
-    RoutePattern.MatchAny(matchers)
-  }  
+  
+  /**
+   * Creates a route pattern that matches any one of the provided paths.
+   */
+  def anyOf(paths: Seq[String]): RoutePattern[Unit] = {
+    paths.foldLeft(RoutePattern(Method.GET, PathCodec.empty)) { (acc, path) =>
+      acc / PathCodec.literal(path)
+    }
+  }
 
   /**
    * Checks to see if the HTTP application may be defined at the specified
@@ -263,7 +269,7 @@ final case class Routes[-Env, +Err](routes: Chunk[zio.http.Route[Env, Err]]) { s
   }
 
   /**
-   * Returns new new HttpApp whose handlers are transformed by the specified
+   * Returns new Routes whose handlers are transformed by the specified
    * function.
    */
   def transform[Env1](
@@ -297,6 +303,37 @@ object Routes extends RoutesCompanionVersionSpecific {
 
   def singleton[Env, Err](h: Handler[Env, Err, (Path, Request), Response])(implicit trace: Trace): Routes[Env, Err] =
     Routes(Route.route(RoutePattern.any)(h))
+
+  /**
+   * Creates routes for serving static files from the directory `docRoot` at the
+   * url path `path`.
+   *
+   * Example: `Routes.serveDirectory(Path.empty / "assets", new
+   * File("/some/local/path"))`
+   *
+   * With this routes in place, a request to
+   * `https://www.domain.com/assets/folder/file1.jpg` would serve the local file
+   * `/some/local/path/folder/file1.jpg`.
+   */
+  def serveDirectory(path: Path, docRoot: File)(implicit trace: Trace): Routes[Any, Nothing] =
+    empty @@ Middleware.serveDirectory(path, docRoot)
+
+  /**
+   * Creates routes for serving static files from resources at the path `path`.
+   *
+   * Example: `Routes.serveResources(Path.empty / "assets")`
+   *
+   * With this routes in place, a request to
+   * `https://www.domain.com/assets/folder/file1.jpg` would serve the file
+   * `src/main/resources/folder/file1.jpg`.
+   *
+   * Provide a `resourcePrefix` if you want to limit the the resource files
+   * served. For instance, with `Routes.serveResources(Path.empty / "assets",
+   * "public")`, a request to `https://www.domain.com/assets/folder/file1.jpg`
+   * would serve the file `src/main/resources/public/folder/file1.jpg`.
+   */
+  def serveResources(path: Path, resourcePrefix: String = ".")(implicit trace: Trace): Routes[Any, Nothing] =
+    empty @@ Middleware.serveResources(path, resourcePrefix)
 
   private[http] final case class Tree[-Env](tree: RoutePattern.Tree[RequestHandler[Env, Response]]) { self =>
     final def ++[Env1 <: Env](that: Tree[Env1]): Tree[Env1] =
