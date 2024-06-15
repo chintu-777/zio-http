@@ -12,31 +12,32 @@ import zio.http.codec._
 import zio.http.endpoint.cli._
 import zio.http.endpoint.{Endpoint, EndpointExecutor}
 
+final case class User(
+  @description("The unique identifier of the User")
+  id: Int,
+  @description("The user's name")
+  name: String,
+  @description("The user's email")
+  email: Option[String],
+)
+object User {
+  implicit val schema: Schema[User] = DeriveSchema.gen[User]
+}
+final case class Post(
+  @description("The unique identifier of the User")
+  userId: Int,
+  @description("The unique identifier of the Post")
+  postId: Int,
+  @description("The post's contents")
+  contents: String,
+)
+object Post {
+  implicit val schema: Schema[Post] = DeriveSchema.gen[Post]
+}
+
 trait TestCliEndpoints {
   import HttpCodec._
   import zio.http.codec.PathCodec._
-  final case class User(
-    @description("The unique identifier of the User")
-    id: Int,
-    @description("The user's name")
-    name: String,
-    @description("The user's email")
-    email: Option[String],
-  )
-  object User {
-    implicit val schema: Schema[User] = DeriveSchema.gen[User]
-  }
-  final case class Post(
-    @description("The unique identifier of the User")
-    userId: Int,
-    @description("The unique identifier of the Post")
-    postId: Int,
-    @description("The post's contents")
-    contents: String,
-  )
-  object Post {
-    implicit val schema: Schema[Post] = DeriveSchema.gen[Post]
-  }
 
   val getUser =
     Endpoint(Method.GET / "users" / int("userId") ?? Doc.p("The unique identifier of the user"))
@@ -80,21 +81,21 @@ object TestCliApp extends zio.cli.ZIOCliDefault with TestCliEndpoints {
 
 object TestCliServer extends zio.ZIOAppDefault with TestCliEndpoints {
   val getUserRoute =
-    getUser.implement {
+    getUser.implementHandler {
       Handler.fromFunctionZIO { case (id, _) =>
         ZIO.succeed(User(id, "Juanito", Some("juanito@test.com"))).debug("Hello")
       }
     }
 
   val getUserPostsRoute =
-    getUserPosts.implement {
+    getUserPosts.implementHandler {
       Handler.fromFunction { case (userId, postId, name) =>
         List(Post(userId, postId, name))
       }
     }
 
   val createUserRoute =
-    createUser.implement {
+    createUser.implementHandler {
       Handler.fromFunction { user =>
         user.name
       }

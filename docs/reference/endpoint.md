@@ -34,7 +34,7 @@ In the above example, we defined an endpoint on the path `/books` that accepts a
 After defining the endpoint, we are ready to implement it. We can implement it using the `Endpoint#implement` method, which takes a proper handler function that will be called when the endpoint is invoked and returns a `Route`:
 
 ```scala
-val booksRoute = endpoint.implement(handler((query: String) => BookRepo.find(query)))
+val booksRoute = endpoint.implement(query => BookRepo.find(query))
 ```
 
 We can also generate OpenAPI documentation for our endpoint using the `OpenAPIGen.fromEndpoints` constructor:
@@ -261,13 +261,13 @@ object EndpointWithMultipleOutputTypes extends ZIOAppDefault {
       .out[Quiz]
 
   def run = Server.serve(
-    endpoint.implement(handler {
+    endpoint.implement(_ =>
       ZIO.randomWith(_.nextBoolean)
         .map(r =>
           if (r) Right(Course("Introduction to Programming", 49.99))
           else Left(Quiz("What is the boiling point of water in Celsius?", 2)),
         )
-    })
+    )
     .toRoutes).provide(Server.default, Scope.default)
 }
 ```
@@ -283,10 +283,10 @@ For failure outputs, we can describe the output properties using the `Endpoint#o
 ```scala mdoc:passthrough
 import utils._
 
-printSource("zio-http-example/src/main/scala/example/endpoint/EndpointWithError.scala")
+printSource("zio-http-example/src/main/scala/example/endpoint/style/DeclarativeProgrammingExample.scala")
 ```
 
-In the above example, we defined an endpoint that describes a path parameter `id` as input and returns a `Book` as output. If the book is not found, the endpoint returns a `NotFound` status code with a custom error message.
+In the above example, we defined an endpoint that describes a query parameter `id` as input and returns a `Book` as output. If the book is not found, the endpoint returns a `NotFound` status code with a custom error message.
 
 ### Multiple Failure Outputs Using `Endpoint#outError`
 
@@ -417,7 +417,7 @@ case class Book(
 The `OpenAPIGen.fromEndpoints` constructor generates OpenAPI documentation from the endpoints. By having the OpenAPI documentation, we can easily generate Swagger UI routes using the `SwaggerUI.routes` constructor:
 
 ```scala
-val booksRoute = endpoint.implement(handler((query: String) => BookRepo.find(query)))
+val booksRoute = endpoint.implement(query => BookRepo.find(query))
 val openAPI    = OpenAPIGen.fromEndpoints(title = "Library API", version = "1.0", endpoint)
 val swaggerRoutes = SwaggerUI.routes("docs" / "openapi", openAPI)
 val routes     = Routes(booksRoute) ++ swaggerRoutes

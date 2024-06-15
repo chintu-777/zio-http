@@ -1,5 +1,7 @@
 package zio.http.endpoint.openapi
 
+import scala.annotation.nowarn
+
 import zio._
 import zio.json.ast.Json
 
@@ -11,6 +13,7 @@ import zio.schema.codec.json._
 
 import zio.http.codec.{SegmentCodec, TextCodec}
 
+@nowarn("msg=possible missing interpolator")
 private[openapi] case class SerializableJsonSchema(
   @fieldName("$ref") ref: Option[String] = None,
   @fieldName("type") schemaType: Option[TypeOrTypes] = None,
@@ -567,6 +570,7 @@ object JsonSchema {
           case StandardType.OffsetTimeType     => JsonSchema.String()
           case StandardType.OffsetDateTimeType => JsonSchema.String()
           case StandardType.ZonedDateTimeType  => JsonSchema.String()
+          case StandardType.CurrencyType       => JsonSchema.String()
         }
 
       case Schema.Optional(schema, _)    => fromZSchema(schema, refType).nullable(true)

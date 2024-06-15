@@ -35,9 +35,9 @@ object WebSocketSpec extends HttpRunnableSpec {
         id  <- DynamicServer.deploy {
           Handler.webSocket { channel =>
             channel.receiveAll {
-              case event @ Read(frame)  => channel.send(Read(frame)) *> msg.add(event)
-              case event @ Unregistered => msg.add(event, true)
-              case event                => msg.add(event)
+              case event @ Read(frame)      => channel.send(Read(frame)) *> msg.add(event)
+              case event: Unregistered.type => msg.add(event, isDone = true)
+              case event                    => msg.add(event)
             }
           }.toRoutes
         }
@@ -126,9 +126,9 @@ object WebSocketSpec extends HttpRunnableSpec {
         id  <- DynamicServer.deploy {
           Handler.webSocket { channel =>
             channel.receiveAll {
-              case event @ Read(frame)  => channel.send(Read(frame)) *> msg.add(event)
-              case event @ Unregistered => msg.add(event, true)
-              case event                => msg.add(event)
+              case event @ Read(frame)      => channel.send(Read(frame)) *> msg.add(event)
+              case event: Unregistered.type => msg.add(event, isDone = true)
+              case event                    => msg.add(event)
             }
           }.toRoutes
         }
@@ -211,7 +211,8 @@ object WebSocketSpec extends HttpRunnableSpec {
   override def spec = suite("Server") {
     serve.as(List(websocketSpec))
   }
-    .provideShared(DynamicServer.live, serverTestLayer, Client.default, Scope.default) @@
+    .provideSome[DynamicServer & Server & Client](Scope.default)
+    .provideShared(DynamicServer.live, serverTestLayer, Client.default) @@
     diagnose(30.seconds) @@ withLiveClock @@ sequential
 
   final class MessageCollector[A](ref: Ref[List[A]], promise: Promise[Nothing, Unit]) {

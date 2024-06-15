@@ -16,13 +16,16 @@
 package zio.http
 
 import java.io.File
+import java.nio.charset.Charset
+
+import scala.annotation.nowarn
 
 import zio._
 import zio.metrics._
 
 import zio.http.codec.{PathCodec, SegmentCodec}
-import zio.http.endpoint.EndpointMiddleware.None.Err
 
+@nowarn("msg=shadows type")
 trait Middleware[-UpperEnv] { self =>
 
   def apply[Env1 <: UpperEnv, Err](app: Routes[Env1, Err]): Routes[Env1, Err]
@@ -42,6 +45,8 @@ trait Middleware[-UpperEnv] { self =>
         self(that(routes))
     }
 }
+
+@nowarn("msg=shadows type")
 object Middleware extends HandlerAspects {
 
   /**
@@ -122,12 +127,12 @@ object Middleware extends HandlerAspects {
             case Some(origin) =>
               config.allowedOrigin(origin) match {
                 case Some(allowOrigin) if config.allowedMethods.contains(request.method) =>
-                  corsHeaders(allowOrigin, acrhHeader, isPreflight = false) -> (request, ())
+                  (corsHeaders(allowOrigin, acrhHeader, isPreflight = false), (request, ()))
                 case _                                                                   =>
-                  Headers.empty -> (request, ())
+                  (Headers.empty, (request, ()))
               }
 
-            case None => Headers.empty -> (request, ())
+            case None => (Headers.empty, (request, ()))
           }
         },
       )(Handler.fromFunction[(Headers, Response)] { case (headers, response) =>
@@ -321,8 +326,9 @@ object Middleware extends HandlerAspects {
       }
 
     def fromDirectory(docRoot: File)(implicit trace: Trace): StaticServe[Any, Throwable] = make { (path, _) =>
-      val target = new File(docRoot.getAbsolutePath() + path.encode)
-      if (target.getCanonicalPath.startsWith(docRoot.getCanonicalPath)) Handler.fromFile(target)
+      val target = new File(docRoot.getAbsolutePath + path.encode)
+      if (target.getCanonicalPath.startsWith(docRoot.getCanonicalPath))
+        Handler.fromFile(target, Charset.defaultCharset())
       else {
         Handler.fromZIO(
           ZIO.logWarning(s"attempt to access file outside of docRoot: ${target.getAbsolutePath}"),
@@ -330,8 +336,8 @@ object Middleware extends HandlerAspects {
       }
     }
 
-    def fromResource(implicit trace: Trace): StaticServe[Any, Throwable] = make { (path, _) =>
-      Handler.fromResource(path.dropLeadingSlash.encode)
+    def fromResource(resourcePrefix: String)(implicit trace: Trace): StaticServe[Any, Throwable] = make { (path, _) =>
+      Handler.fromResource(s"${resourcePrefix}/${path.dropLeadingSlash.encode}")
     }
 
   }
@@ -394,9 +400,15 @@ object Middleware extends HandlerAspects {
    * With this middleware in place, a request to
    * `https://www.domain.com/assets/folder/file1.jpg` would serve the file
    * `src/main/resources/folder/file1.jpg`.
+   *
+   * Provide a `resourcePrefix` if you want to limit the the resource files
+   * served. For instance, with `Middleware.serveResources(Path.empty /
+   * "assets", "public")`, a request to
+   * `https://www.domain.com/assets/folder/file1.jpg` would serve the file
+   * `src/main/resources/public/folder/file1.jpg`.
    */
-  def serveResources(path: Path)(implicit trace: Trace): Middleware[Any] =
-    toMiddleware(path, StaticServe.fromResource)
+  def serveResources(path: Path, resourcePrefix: String = ".")(implicit trace: Trace): Middleware[Any] =
+    toMiddleware(path, StaticServe.fromResource(resourcePrefix))
 
   /**
    * Creates a middleware for managing the flash scope.

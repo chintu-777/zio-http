@@ -387,7 +387,7 @@ object PathCodec          {
   def apply(value: String): PathCodec[Unit] = {
     val path = Path(value)
 
-    path.segments match {
+    (path.segments: @unchecked) match {
       case Chunk()                 => PathCodec.empty
       case Chunk(first, rest @ _*) =>
         rest.foldLeft[PathCodec[Unit]](Segment(SegmentCodec.literal(first))) { (pathSpec, segment) =>
@@ -485,13 +485,17 @@ object PathCodec          {
     def add[A1 >: A](segments: Iterable[SegmentCodec[_]], value: A1): SegmentSubtree[A1] =
       self ++ SegmentSubtree.single(segments, value)
 
-    def get(path: Path): Chunk[A] = {
-      val segments = path.segments
-      var subtree  = self
-      var result   = subtree.value
-      var i        = 0
+    def get(path: Path): Chunk[A] =
+      get(path, 0)
 
-      while (i < segments.length) {
+    private def get(path: Path, from: Int): Chunk[A] = {
+      val segments  = path.segments
+      val nSegments = segments.length
+      var subtree   = self
+      var result    = subtree.value
+      var i         = from
+
+      while (i < nSegments) {
         val segment = segments(i)
 
         if (subtree.literals.contains(segment)) {
@@ -499,31 +503,63 @@ object PathCodec          {
           subtree = subtree.literals(segment)
 
           result = subtree.value
-          i = i + 1
+          i += 1
         } else {
-          // Slower fallback path. Have to evaluate all predicates at this node:
           val flattened = subtree.othersFlat
 
-          var index = 0
           subtree = null
+          flattened.length match {
+            case 0 => // No predicates to evaluate
+            case 1 => // Only 1 predicate to evaluate (most common)
+              val (codec, subtree0) = flattened(0)
+              val matched           = codec.matches(segments, i)
+              if (matched > 0) {
+                subtree = subtree0
+                result = subtree0.value
+                i += matched
+              }
+            case n => // Slowest fallback path. Have to to find the first predicate where the subpath returns a result
+              val matches         = Array.ofDim[Int](n)
+              var index           = 0
+              var nPositive       = 0
+              var lastPositiveIdx = -1
+              while (index < n) {
+                val (codec, _) = flattened(index)
+                val n          = codec.matches(segments, i)
+                if (n > 0) {
+                  matches(index) = n
+                  nPositive += 1
+                  lastPositiveIdx = index
+                }
+                index += 1
+              }
 
-          while ((index < flattened.length) && (subtree eq null)) {
-            val tuple   = flattened(index)
-            val matched = tuple._1.matches(segments, i)
-
-            if (matched >= 0) {
-              subtree = tuple._2
-              result = subtree.value
-              i = i + matched
-            } else {
-              // No match found. Keep looking at alternate routes:
-              index += 1
-            }
+              nPositive match {
+                case 0 => ()
+                case 1 =>
+                  subtree = flattened(lastPositiveIdx)._2
+                  result = subtree.value
+                  i += matches(lastPositiveIdx)
+                case _ =>
+                  index = 0
+                  while (index < n && (subtree eq null)) {
+                    val matched = matches(index)
+                    if (matched > 0) {
+                      val (_, subtree0) = flattened(index)
+                      if (subtree0.get(path, i + matched).nonEmpty) {
+                        subtree = subtree0
+                        result = subtree.value
+                        i += matched
+                      }
+                    }
+                    index += 1
+                  }
+              }
           }
 
           if (subtree eq null) {
             result = Chunk.empty
-            i = segments.length
+            i = nSegments
           }
         }
       }

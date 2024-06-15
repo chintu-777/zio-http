@@ -657,6 +657,68 @@ object EndpointGenSpec extends ZIOSpecDefault {
           )
           assertTrue(scala.files.head == expected)
         },
+        test("endpoints with overlapping prefix") {
+          val endpoint1 = Endpoint(Method.GET / "api" / "v1" / "users")
+          val endpoint2 = Endpoint(Method.GET / "api" / "v1" / "users" / "info")
+          val openAPI   = OpenAPIGen.fromEndpoints(endpoint1, endpoint2)
+          val scala     = EndpointGen.fromOpenAPI(openAPI)
+          val expected1 = Code.File(
+            List("api", "v1", "Users.scala"),
+            pkgPath = List("api", "v1"),
+            imports = List(Code.Import.FromBase(path = "component._")),
+            objects = List(
+              Code.Object(
+                "Users",
+                Map(
+                  Code.Field("get") -> Code.EndpointCode(
+                    Method.GET,
+                    Code.PathPatternCode(segments =
+                      List(Code.PathSegmentCode("api"), Code.PathSegmentCode("v1"), Code.PathSegmentCode("users")),
+                    ),
+                    queryParamsCode = Set.empty,
+                    headersCode = Code.HeadersCode.empty,
+                    inCode = Code.InCode("Unit"),
+                    outCodes = Nil,
+                    errorsCode = Nil,
+                  ),
+                ),
+              ),
+            ),
+            caseClasses = Nil,
+            enums = Nil,
+          )
+          val expected2 = Code.File(
+            List("api", "v1", "users", "Info.scala"),
+            pkgPath = List("api", "v1", "users"),
+            imports = List(Code.Import.FromBase(path = "component._")),
+            objects = List(
+              Code.Object(
+                "Info",
+                Map(
+                  Code.Field("get") -> Code.EndpointCode(
+                    Method.GET,
+                    Code.PathPatternCode(segments =
+                      List(
+                        Code.PathSegmentCode("api"),
+                        Code.PathSegmentCode("v1"),
+                        Code.PathSegmentCode("users"),
+                        Code.PathSegmentCode("info"),
+                      ),
+                    ),
+                    queryParamsCode = Set.empty,
+                    headersCode = Code.HeadersCode.empty,
+                    inCode = Code.InCode("Unit"),
+                    outCodes = Nil,
+                    errorsCode = Nil,
+                  ),
+                ),
+              ),
+            ),
+            caseClasses = Nil,
+            enums = Nil,
+          )
+          assertTrue(scala.files.toSet == Set(expected1, expected2))
+        },
       ),
       suite("data gen spec")(
         test("generates case class, companion object and schema") {
@@ -676,6 +738,7 @@ object EndpointGenSpec extends ZIOSpecDefault {
                   Code.Field("name", Code.Primitive.ScalaString),
                 ),
                 companionObject = Some(Code.Object.schemaCompanion("User")),
+                mixins = Nil,
               ),
             ),
             Nil,
@@ -696,10 +759,10 @@ object EndpointGenSpec extends ZIOSpecDefault {
               Code.Enum(
                 "Direction",
                 List(
-                  Code.CaseClass("North"),
-                  Code.CaseClass("South"),
-                  Code.CaseClass("East"),
-                  Code.CaseClass("West"),
+                  Code.CaseClass("North", Nil),
+                  Code.CaseClass("South", Nil),
+                  Code.CaseClass("East", Nil),
+                  Code.CaseClass("West", Nil),
                 ),
                 schema = true,
               ),
@@ -731,6 +794,7 @@ object EndpointGenSpec extends ZIOSpecDefault {
                       Code.Field("cvv", Code.Primitive.ScalaString),
                     ),
                     companionObject = Some(Code.Object.schemaCompanion("Card")),
+                    mixins = Nil,
                   ),
                   Code.CaseClass(
                     "Cash",
@@ -738,6 +802,7 @@ object EndpointGenSpec extends ZIOSpecDefault {
                       Code.Field("amount", Code.Primitive.ScalaInt),
                     ),
                     companionObject = Some(Code.Object.schemaCompanion("Cash")),
+                    mixins = Nil,
                   ),
                 ),
                 caseNames = List("Card", "cash"),
@@ -771,6 +836,7 @@ object EndpointGenSpec extends ZIOSpecDefault {
                       Code.Field("cvv", Code.Primitive.ScalaString),
                     ),
                     companionObject = Some(Code.Object.schemaCompanion("Card")),
+                    mixins = List("PaymentNamedDiscriminator"),
                   ),
                   Code.CaseClass(
                     "Cash",
@@ -778,6 +844,7 @@ object EndpointGenSpec extends ZIOSpecDefault {
                       Code.Field("amount", Code.Primitive.ScalaInt),
                     ),
                     companionObject = Some(Code.Object.schemaCompanion("Cash")),
+                    mixins = List("PaymentNamedDiscriminator"),
                   ),
                 ),
                 caseNames = List("Card", "cash"),
@@ -813,6 +880,7 @@ object EndpointGenSpec extends ZIOSpecDefault {
                       Code.Field("cvv", Code.Primitive.ScalaString),
                     ),
                     companionObject = Some(Code.Object.schemaCompanion("Card")),
+                    mixins = List("PaymentNoDiscriminator"),
                   ),
                   Code.CaseClass(
                     "Cash",
@@ -820,6 +888,7 @@ object EndpointGenSpec extends ZIOSpecDefault {
                       Code.Field("amount", Code.Primitive.ScalaInt),
                     ),
                     companionObject = Some(Code.Object.schemaCompanion("Cash")),
+                    mixins = List("PaymentNoDiscriminator"),
                   ),
                 ),
                 caseNames = Nil,
@@ -871,6 +940,7 @@ object EndpointGenSpec extends ZIOSpecDefault {
                         "RequestBody",
                         fields = fields,
                         companionObject = Some(Code.Object.schemaCompanion("RequestBody")),
+                        mixins = Nil,
                       ),
                     ),
                     enums = Nil,
@@ -926,6 +996,7 @@ object EndpointGenSpec extends ZIOSpecDefault {
                         "ResponseBody",
                         fields = fields,
                         companionObject = Some(Code.Object.schemaCompanion("ResponseBody")),
+                        mixins = Nil,
                       ),
                     ),
                     enums = Nil,
@@ -981,11 +1052,13 @@ object EndpointGenSpec extends ZIOSpecDefault {
                         "RequestBody",
                         fields = fields,
                         companionObject = Some(Code.Object.schemaCompanion("RequestBody")),
+                        mixins = Nil,
                       ),
                       Code.CaseClass(
                         "ResponseBody",
                         fields = fields,
                         companionObject = Some(Code.Object.schemaCompanion("ResponseBody")),
+                        mixins = Nil,
                       ),
                     ),
                     enums = Nil,
@@ -1209,6 +1282,7 @@ object EndpointGenSpec extends ZIOSpecDefault {
                     enums = Nil,
                   ),
                 ),
+                mixins = Nil,
               ),
             ),
             enums = Nil,

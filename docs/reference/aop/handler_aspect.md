@@ -9,6 +9,14 @@ A `HandlerAspect` is a wrapper around `ProtocolStack` with the two following fea
 
 - It is specialized to work with an output context `CtxOut` that can be passed through the middleware stack. This allows each layer to add its output context to the transformation process. So the `CtxOut` will be a tuple of all the output contexts that each layer in the stack has added. These output contexts are useful when we are writing middleware that needs to pass some information, which is the result of some computation based on the input request, to the handler that is at the end of the middleware stack.
 
+The diagram below illustrates how `HandlerAspect` works:
+
+<div style={{textAlign: 'center', margin: '10px'}}>
+
+![HandlerAspect Diagram](handler-aspect.svg)
+
+</div>
+
 Now, we are ready to see the definition of `HandlerAspect`:
 
 ```scala
@@ -535,7 +543,7 @@ val route =
 If we deploy this route and send a GET request to the `/internal-error` route with the `Accept: text/html` header, we will get the following response body:
 
 ```html
-<!DOCTYPE html><html><head><title>ZIO Http - Forbidden</title><style>
+<!DOCTYPE html><html><head><title>ZIO HTTP - Forbidden</title><style>
  body {
    font-family: monospace;
    font-size: 16px;

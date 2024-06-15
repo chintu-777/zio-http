@@ -92,5 +92,6 @@ object RoutesSpec extends ZIOHttpSpec {
         assert(extractStatus(result3))(equalTo(Status.NotFound))
       }
     },
+
   )
 }

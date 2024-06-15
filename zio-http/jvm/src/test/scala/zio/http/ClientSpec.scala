@@ -18,9 +18,11 @@ package zio.http
 
 import java.net.ConnectException
 
+import scala.annotation.nowarn
+
 import zio._
 import zio.test.Assertion._
-import zio.test.TestAspect.{sequential, timeout, withLiveClock}
+import zio.test.TestAspect.{flaky, sequential, timeout, withLiveClock}
 import zio.test._
 
 import zio.stream.ZStream
@@ -84,7 +86,7 @@ object ClientSpec extends HttpRunnableSpec {
           .deployAndRequest(c => (c @@ ZClientAspect.requestLogging()).get("/"))
           .runZIO(())
         loggedUrl <- ZTestLogger.logOutput.map(_.collectFirst { case m => m.annotations("url") }.mkString)
-      } yield assertTrue(loggedUrl == s"$baseURL/")
+      } yield assertTrue(loggedUrl == s"$baseURL/"): @nowarn
     },
     test("reading of unfinished body must fail") {
       val app         = Handler.fromStreamChunked(ZStream.never).sandbox.toRoutes
@@ -98,6 +100,26 @@ object ClientSpec extends HttpRunnableSpec {
       val effect = app.deployAndRequest(requestCode).runZIO(())
       assertZIO(effect)(isTrue)
     },
+    test("request can be timed out manually while awaiting connection") {
+      // Unfortunately we have to use a real URL here, as we can't really simulate a long connection time
+      val url  = URL.decode("https://test.com").toOption.get
+      val resp = ZIO.scoped(ZClient.request(Request.get(url))).timeout(500.millis)
+      assertZIO(resp)(isNone)
+    } @@ timeout(5.seconds) @@ flaky(5),
+    test("authorization header without scheme") {
+      val app             =
+        Handler
+          .fromFunction[Request] { req =>
+            req.headers.get(Header.Authorization) match {
+              case Some(h) => Response.text(h.renderedValue)
+              case None    => Response.unauthorized("missing auth")
+            }
+          }
+          .toRoutes
+      val responseContent =
+        app.deploy(Request(headers = Headers(Header.Authorization.Unparsed("", "my-token")))).flatMap(_.body.asString)
+      assertZIO(responseContent)(equalTo("my-token"))
+    } @@ timeout(5.seconds),
   )
 
   override def spec = {

@@ -608,7 +608,7 @@ sealed trait Handler[-R, +Err, -In, +Out] { self =>
    * the handler has been appropriately sandboxed, turning all possible failures
    * into well-formed HTTP responses.
    */
-  @deprecated("Use toRoutes instead. Will be removed in the next release.")
+  @deprecated("Use toRoutes instead. Will be removed in the next release.", "3.0.0-RC7")
   def toHttpApp(implicit err: Err <:< Response, in: Request <:< In, out: Out <:< Response, trace: Trace): HttpApp[R] = {
     val handler: Handler[R, Response, Request, Response] =
       self.asInstanceOf[Handler[R, Response, Request, Response]]
@@ -848,10 +848,14 @@ object Handler extends HandlerPlatformSpecific with HandlerVersionSpecific {
     }
   }
 
-  def fromFile[R](makeFile: => File)(implicit trace: Trace): Handler[R, Throwable, Any, Response] =
-    fromFileZIO(ZIO.attempt(makeFile))
+  def fromFile[R](makeFile: => File, charset: Charset = Charsets.Utf8)(implicit
+    trace: Trace,
+  ): Handler[R, Throwable, Any, Response] =
+    fromFileZIO(ZIO.attempt(makeFile), charset)
 
-  def fromFileZIO[R](getFile: ZIO[R, Throwable, File])(implicit trace: Trace): Handler[R, Throwable, Any, Response] = {
+  def fromFileZIO[R](getFile: ZIO[R, Throwable, File], charset: Charset = Charsets.Utf8)(implicit
+    trace: Trace,
+  ): Handler[R, Throwable, Any, Response] = {
     Handler.fromZIO[R, Throwable, Response](
       ZIO.blocking {
         getFile.flatMap { file =>
@@ -870,7 +874,9 @@ object Handler extends HandlerPlatformSpecific with HandlerVersionSpecific {
                 // not the file extension, to determine how to process a URL.
                 // {{{<a href="MSDN Doc">https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Type</a>}}}
                 determineMediaType(pathName) match {
-                  case Some(mediaType) => ZIO.succeed(response.addHeader(Header.ContentType(mediaType)))
+                  case Some(mediaType) =>
+                    val charset0 = if (mediaType.mainType == "text" || !mediaType.binary) Some(charset) else None
+                    ZIO.succeed(response.addHeader(Header.ContentType(mediaType, charset = charset0)))
                   case None            => ZIO.succeed(response)
                 }
               }
