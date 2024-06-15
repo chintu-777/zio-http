@@ -17,8 +17,14 @@
 package zio.http
 
 import zio.test._
+import zio.test.Assertion._
+import zio.http._
+import zio.http.Method._
+import zio.http.Status._
+import zio.{ Chunk, ZIO }
 
 object RoutesSpec extends ZIOHttpSpec {
+
   def extractStatus(response: Response): Status = response.status
 
   def spec = suite("HttpAppSpec")(
@@ -26,14 +32,14 @@ object RoutesSpec extends ZIOHttpSpec {
       val app = Routes.empty
 
       for {
-        result <- app.run()
+        result <- app.run(Request(Method.GET, Path("/")))
       } yield assertTrue(extractStatus(result) == Status.NotFound)
     },
     test("compose empty not found") {
       val app = Routes.empty ++ Routes.empty
 
       for {
-        result <- app.run()
+        result <- app.run(Request(Method.GET, Path("/")))
       } yield assertTrue(extractStatus(result) == Status.NotFound)
     },
     test("run identity") {
@@ -44,42 +50,42 @@ object RoutesSpec extends ZIOHttpSpec {
       }
 
       for {
-        result <- app.runZIO(Request(body = body))
+        result <- app.run(Request(Method.GET, Path("/")))
       } yield assertTrue(result.body == body)
     },
     test("routes with different path parameter arities should all be handled") {
-      val one    = Method.GET / string("first") -> Handler.ok
-      val getone = Request.get("/1")
+      val one = Method.GET / string("first") -> Handler.ok
+      val getOne = Request(Method.GET, Path("/1"))
 
-      val two    = Method.GET / string("prefix") / string("second") -> Handler.internalServerError
-      val gettwo = Request.get("/2/two")
+      val two = Method.GET / string("prefix") / string("second") -> Handler.internalServerError
+      val getTwo = Request(Method.GET, Path("/2/two"))
 
-      val onetwo = Routes(one, two)
-      val twoone = Routes(two, one)
+      val oneTwo = Routes(one, two)
+      val twoOne = Routes(two, one)
 
       for {
-        onetwoone <- onetwo.runZIO(getone)
-        onetwotwo <- onetwo.runZIO(gettwo)
-        twooneone <- twoone.runZIO(getone)
-        twoonetwo <- twoone.runZIO(gettwo)
+        onetwoone <- oneTwo.run(getOne)
+        onetwotwo <- oneTwo.run(getTwo)
+        twooneone <- twoOne.run(getOne)
+        twoonetwo <- twoOne.run(getTwo)
       } yield {
         assertTrue(
-          extractStatus(onetwoone) == Status.Ok,
-          extractStatus(onetwotwo) == Status.InternalServerError,
-          extractStatus(twooneone) == Status.Ok,
-          extractStatus(twoonetwo) == Status.InternalServerError,
+          extractStatus(onetwoone) == Status.Ok &&
+          extractStatus(onetwotwo) == Status.InternalServerError &&
+          extractStatus(twooneone) == Status.Ok &&
+          extractStatus(twoonetwo) == Status.InternalServerError
         )
       }
     },
     test("anyOf method matches correct route") {
       val handler = Http.collect[Request] {
-        case req @ GET -> !! / "test1" => Response.text("Handler for test1")
-        case req @ GET -> !! / "test2" => Response.text("Handler for test2")
+        case req if req.method == Method.GET && req.url.path == "/test1" => Response.text("Handler for test1")
+        case req if req.method == Method.GET && req.url.path == "/test2" => Response.text("Handler for test2")
         case _ => Response.status(Status.NotFound)
       }
 
       val routes = Routes(
-        GET / Routes.anyOf("test1", "test2") -> handler
+        RoutePattern(GET, "/") / Routes.anyOf("test1", "test2") -> handler
       )
 
       for {
@@ -91,7 +97,27 @@ object RoutesSpec extends ZIOHttpSpec {
         assert(extractStatus(result2))(equalTo(Status.OK)) &&
         assert(extractStatus(result3))(equalTo(Status.NotFound))
       }
-    },
-
+    }
   )
+}
+
+trait ZIOHttpSpec extends DefaultRunnableSpec {
+
+  // Implementations of these methods depend on your specific setup
+  def handler: PartialFunction[Request, ZIO[Any, Throwable, Response]]
+  def app: HttpApp[Any, Throwable]
+
+  // Helper function to extract response status from Response
+  def extractStatus(response: Response): Status
+
+  // Override with specific test cases
+  def spec: ZSpec[Environment, Failure]
+
+  override def spec: ZSpec[Environment, Failure] =
+    suite("ZIO HTTP Spec")(
+      test("test example") {
+        // Example test case
+        assertCompletes
+      }
+    )
 }
